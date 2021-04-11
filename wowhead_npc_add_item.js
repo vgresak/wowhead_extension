@@ -1,21 +1,20 @@
 // ==UserScript==
 // @name         Wowhead npc add item
 // @namespace    https://github.com/vgresak/
-// @version      0.2.0
-// @description  Creates button to copy wowhead item into ".npc add item [id]"
+// @version      0.3.0
+// @description  Creates button to copy wowhead item into ".npc add item [id]". Command can also be changed via [Set cmd] button.
 // @author       Viktor Grešák
 // @match        https://www.wowhead.com/*
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @grant        GM_deleteValue
 // @require      http://code.jquery.com/jquery-2.1.4.min.js
 // @require      https://code.jquery.com/ui/1.12.1/jquery-ui.js
 // @run-at       document-end
 // ==/UserScript==
 
 GM_addStyle(`
-    .copyBtn{
+    #wowheadExtSetCmd, .copyBtn{
         margin: 2px; 
         padding: 2px; 
         border: 1px solid #ffd100;
@@ -29,11 +28,9 @@ const hrefItemRegex = /\/item=(\d+).*/;
 })();
 
 function initPage() {
-    console.info("Initializing extension.");
     if (!isPageReady()) {
         return;
     }
-    console.info("Adding buttons.");
     addButtons();
 };
 
@@ -43,8 +40,12 @@ function isPageReady() {
 };
 
 function addButtons() {
+    if (hasNoSetCmdButton()) {
+        console.log("Adding [Set cmd] button");
+        addSetCmdButton();
+    }
     if (isItemPage() && hasNoItemPageButton()) {
-        console.log("Concrete item page - adding single button")
+        console.log("Concrete item page - adding single button");
         addItemPageButton();
     }
     const itemLinks = $("a")
@@ -58,34 +59,20 @@ function addButtons() {
     itemLinks.before(addCopyBtn);
 };
 
-function hasText() {
-    return $(this).text() !== "";
+function hasNoSetCmdButton() {
+    return $("#wowheadExtSetCmd").length === 0;
 }
 
-function addCopyBtn() {
-    let match = hrefItemRegex.exec($(this).attr("href"));
-    const btn = $("<a class=\"copyBtn\">Copy</a>");
-    btn.click((e) => {
-        e.preventDefault();
-        copyCmdToClipboard(match[1]);
+function addSetCmdButton() {
+    let setCmdBtn = $("<a id=\"wowheadExtSetCmd\">Set cmd</a>");
+    setCmdBtn.click(async function () {
+        const existingVal = await GM_getValue("wowheadExtCmd", ".npc add item");
+        let newVal = prompt("Set new command", existingVal);
+        if (newVal !== null) {
+            await GM_setValue("wowheadExtCmd", newVal);
+        }
     });
-    return btn;
-}
-
-function hasItemHref() {
-    return hrefItemRegex.test($($(this)).attr("href"));
-}
-
-function hasNoItemPageButton() {
-    return $("#itemPageCopyBtn").length === 0;
-}
-
-function addItemPageButton() {
-    const btn = $("<a class=\"copyBtn\" id=\"itemPageCopyBtn\">Copy</a>");
-    btn.prependTo($("#main-contents"));
-    btn.click(() => {
-        copyCmdToClipboard(getItemIdFromPageUrl());
-    });
+    $("#main-contents").prepend(setCmdBtn);
 }
 
 function isItemPage() {
@@ -101,9 +88,22 @@ function getItemIdFromPageUrl() {
     return regexRes[1];
 }
 
-function copyCmdToClipboard(id) {
+function hasNoItemPageButton() {
+    return $("#itemPageCopyBtn").length === 0;
+}
+
+function addItemPageButton() {
+    const btn = $("<a class=\"copyBtn\" id=\"itemPageCopyBtn\">Copy</a>");
+    btn.prependTo($("#main-contents"));
+    btn.click(async () => {
+        await copyCmdToClipboard(getItemIdFromPageUrl());
+    });
+}
+
+async function copyCmdToClipboard(id) {
+    let cmd = await GM_getValue("wowheadExtCmd", ".npc add item");
     const copyInput = $(`<input type="text" id="wowheadCopyInput"/>`);
-    copyInput.val(".npc add item " + id)
+    copyInput.val(`${cmd} ${id}`);
     const body = $("body");
     copyInput.appendTo(body);
     copyInput.select();
@@ -112,6 +112,24 @@ function copyCmdToClipboard(id) {
     copyInput.remove();
 }
 
-function notInHeader () {
+function hasItemHref() {
+    return hrefItemRegex.test($($(this)).attr("href"));
+}
+
+function hasText() {
+    return $(this).text() !== "";
+}
+
+function notInHeader() {
     return $(this).closest(".header-right").length === 0;
+}
+
+function addCopyBtn() {
+    let match = hrefItemRegex.exec($(this).attr("href"));
+    const btn = $("<a class=\"copyBtn\">Copy</a>");
+    btn.click(async (e) => {
+        e.preventDefault();
+        await copyCmdToClipboard(match[1]);
+    });
+    return btn;
 }

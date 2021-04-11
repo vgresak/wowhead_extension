@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Wowhead npc add item
 // @namespace    https://github.com/vgresak/
-// @version      0.1.0
+// @version      0.2.0
 // @description  Creates button to copy wowhead item into ".npc add item [id]"
 // @author       Viktor Grešák
 // @match        https://www.wowhead.com/*
+// @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue
@@ -13,54 +14,57 @@
 // @run-at       document-end
 // ==/UserScript==
 
+GM_addStyle(`
+    .copyBtn{
+        margin: 2px; 
+        padding: 2px; 
+        border: 1px solid #ffd100;
+    }
+`);
+
 const hrefItemRegex = /\/item=(\d+).*/;
 (async function () {
     'use strict';
-
-
-    let initPage = async function () {
-        console.info("Initializing extension.");
-
-        if (!isPageReady()) {
-            setTimeout(initPage, 1000);
-            return;
-        }
-
-        console.info("Adding buttons.");
-        await addButtons();
-    };
-
-    let isPageReady = function () {
-        let tabItems = $("#tab-items");
-        let transmog = $("#transmog");
-        return tabItems.length || transmog.length || isItemPage();
-    };
-
-    let addButtons = async function () {
-        if (isItemPage()) {
-            console.log("Concrete item page - adding single button")
-            addItemPageButton();
-        }
-
-
-        $("#tab-items a.listview-cleartext").filter(hasItemHref).after(addCopyBtn);
-
-        $("#tab-items .copyBtn").each(function () {
-            let td = $(this).closest("tr").find("td:first");
-            $(this).detach().prependTo(td);
-        });
-
-        $("#transmog a").filter(hasItemHref).filter(function () { return $(this).text() !== "" }).before(addCopyBtn);
-
-
-    };
-
-    await initPage();
+    setInterval(initPage, 1000);
 })();
+
+function initPage() {
+    console.info("Initializing extension.");
+    if (!isPageReady()) {
+        return;
+    }
+    console.info("Adding buttons.");
+    addButtons();
+};
+
+function isPageReady() {
+    const hasItemLinks = $("a").filter(hasItemHref).filter(hasText).length;
+    return hasItemLinks || isItemPage();
+};
+
+function addButtons() {
+    if (isItemPage() && hasNoItemPageButton()) {
+        console.log("Concrete item page - adding single button")
+        addItemPageButton();
+    }
+    const itemLinks = $("a")
+        .filter(hasItemHref)
+        .filter(hasText)
+        .filter(":not(.copyBtnAdded)")
+        .filter(notInHeader);
+    itemLinks.each(function () {
+        $(this).addClass("copyBtnAdded");
+    });
+    itemLinks.before(addCopyBtn);
+};
+
+function hasText() {
+    return $(this).text() !== "";
+}
 
 function addCopyBtn() {
     let match = hrefItemRegex.exec($(this).attr("href"));
-    const btn = $("<button class=\"copyBtn\">Copy</button>");
+    const btn = $("<a class=\"copyBtn\">Copy</a>");
     btn.click((e) => {
         e.preventDefault();
         copyCmdToClipboard(match[1]);
@@ -72,8 +76,12 @@ function hasItemHref() {
     return hrefItemRegex.test($($(this)).attr("href"));
 }
 
+function hasNoItemPageButton() {
+    return $("#itemPageCopyBtn").length === 0;
+}
+
 function addItemPageButton() {
-    const btn = $("<button>Copy</button>");
+    const btn = $("<a class=\"copyBtn\" id=\"itemPageCopyBtn\">Copy</a>");
     btn.prependTo($("#main-contents"));
     btn.click(() => {
         copyCmdToClipboard(getItemIdFromPageUrl());
@@ -102,4 +110,8 @@ function copyCmdToClipboard(id) {
     copyInput.focus();
     document.execCommand("copy");
     copyInput.remove();
+}
+
+function notInHeader () {
+    return $(this).closest(".header-right").length === 0;
 }
